@@ -9,6 +9,7 @@ import numpy as np
 root = '/data2/liuxiaopeng/Data/BraTS2018/Train'
 valid_data_dir = '/data2/liuxiaopeng/Data/BraTS2018/Valid'
 
+
 def write(data, fname, root=root):
     fname = os.path.join(root, fname)
     with open(fname, 'w') as f:
@@ -21,7 +22,7 @@ lgg = os.listdir(os.path.join(root, 'LGG'))
 lgg = [os.path.join('LGG', f) for f in lgg]
 
 X = hgg + lgg
-Y = [1]*len(hgg) + [0]*len(lgg)
+Y = [1] * len(hgg) + [0] * len(lgg)
 
 write(X, 'all.txt')
 
@@ -36,8 +37,6 @@ for k, (train_index, valid_index) in enumerate(skf.split(Y, Y)):
     write(train_list, 'train_{}.txt'.format(k))
     write(valid_list, 'valid_{}.txt'.format(k))
 
-
 valid = os.listdir(os.path.join(valid_data_dir))
 valid = [f for f in valid if not (f.endswith('.csv') or f.endswith('.txt'))]
 write(valid, 'valid.txt', root=valid_data_dir)
-

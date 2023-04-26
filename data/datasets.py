@@ -2,11 +2,10 @@ import os
 import torch
 from torch.utils.data import Dataset
 
+# noinspection PyUnresolvedReferences
 from .rand import Uniform
-from .transforms import Rot90, Flip, Identity, Compose
-from .transforms import GaussianBlur, Noise, Normalize, RandSelect
-from .transforms import RandCrop, CenterCrop, Pad, RandCrop3D, RandomRotion, RandomFlip, RandomIntensityChange
-from .transforms import NumpyType
+# noinspection PyUnresolvedReferences
+from .transforms import Rot90, Flip, Identity, Compose, GaussianBlur, Noise, Normalize, RandSelect,RandCrop, CenterCrop, Pad, RandCrop3D, RandomRotion, RandomFlip, RandomIntensityChange, NumpyType
 from .data_utils import pkload
 
 import numpy as np
@@ -18,7 +17,7 @@ class BraTSDataset(Dataset):
         with open(list_file) as f:
             for line in f:
                 line = line.strip()
-                name = line.split('/')[-1]
+                name = os.path.basename(line)
                 names.append(name)
                 path = os.path.join(root, line, name + '_')
                 paths.append(path)

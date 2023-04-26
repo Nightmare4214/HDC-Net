@@ -10,10 +10,10 @@ weight_type: square
 eps: 1e-5
 dataset: BraTSDataset
 seed: 1024
-batch_size: 10
+batch_size: 5
 num_epochs: 900
-save_freq: 50     # save every 50 epochs
-valid_freq: 10   # validate every 10 epochs
+save_freq: 1     # save every 50 epochs
+valid_freq: 1   # validate every 10 epochs
 start_iter: 0
 
 opt: Adam
@@ -22,10 +22,11 @@ opt_params:
   weight_decay: 1e-5
   amsgrad: true
 
-workers: 10
+workers: 5
 
-train_list: all.txt
-valid_list: valid.txt
+train_list: train.txt
+valid_list: val.txt
+test_list: test.txt
 train_transforms: # for training
   Compose([
     RandCrop3D((128,128,128)),

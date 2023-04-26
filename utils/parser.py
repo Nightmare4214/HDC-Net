@@ -11,6 +11,7 @@ import logging
 
 path = os.path.dirname(__file__)
 
+
 class AttrDict(dict):
     def __getattr__(self, name):
         if name in self.__dict__:
@@ -71,14 +72,15 @@ def parse(d):
         return d
     return AttrDict({k: parse(v) for k, v in d.items()})
 
+
 def load(fname):
     with open(fname, 'r') as f:
-        ret = parse(yaml.load(f))
+        ret = parse(yaml.full_load(f))
     return ret
 
 
 def setup(args, log):
-    ldir = os.path.join(path, '../', 'logs')
+    ldir = os.path.join(path, '..', 'logs')
     if not os.path.exists(ldir):
         os.makedirs(ldir)
 
@@ -86,11 +88,12 @@ def setup(args, log):
     lfile = os.path.join(ldir, lfile)
 
     logging.basicConfig(level=logging.INFO,
-            format='%(asctime)s %(message)s', filename=lfile)
+                        format='%(asctime)s %(message)s', filename=lfile)
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     console.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
     logging.getLogger('').addHandler(console)
+
 
 class Parser(AttrDict):
     def __init__(self, cfg_name='', log=''):
@@ -106,9 +109,9 @@ class Parser(AttrDict):
     def add_cfg(self, cfg, args=None, update=False):
         if os.path.isfile(cfg):
             fname = cfg
-            cfg   = os.path.splitext(os.path.basename(cfg))[0]
+            cfg = os.path.splitext(os.path.basename(cfg))[0]
         else:
-            fname = os.path.join(path, '../experiments', cfg + '.yaml')
+            fname = os.path.join(path, '..', 'experiments', cfg + '.yaml')
 
         self.merge(load(fname))
         self['name'] = cfg

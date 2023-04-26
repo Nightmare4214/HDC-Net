@@ -1,26 +1,20 @@
 # coding=utf-8
 import argparse
+import logging
 import os
 import time
-import logging
-import random
+
+import setproctitle
 import torch
-import torch.backends.cudnn as cudnn
 import torch.optim
+from timm.utils import AverageMeter
 from torch.utils.data import DataLoader
 
-cudnn.benchmark = True
-
-import numpy as np
 import models
-
 from data import datasets
 from data.sampler import CycleSampler
-from data.data_utils import init_fn
 from utils import Parser, criterions
-
-from predict import AverageMeter
-import setproctitle  # pip install setproctitle
+from utils.utils import setup_seed, seed_worker, adjust_learning_rate
 
 parser = argparse.ArgumentParser()
 
@@ -34,7 +28,7 @@ parser.add_argument('-restore', '--restore', default='model_last.pth', type=str)
 
 path = os.path.dirname(__file__)
 
-## parse arguments
+# parse arguments
 args = parser.parse_args()
 args = Parser(args.cfg, log='train').add_args(args)
 # args.net_params.device_ids= [int(x) for x in (args.gpu).split(',')]
@@ -44,12 +38,12 @@ args.resume = os.path.join(ckpts, args.restore)  # specify the epoch
 
 
 def main():
-    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
     assert torch.cuda.is_available(), "Currently, we only support CUDA version"
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    random.seed(args.seed)
-    np.random.seed(args.seed)
+    torch.cuda.empty_cache()
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    g = torch.Generator()
+    g.manual_seed(0)
+    setup_seed(args.seed)
 
     Network = getattr(models, args.net)  #
     model = Network(**args.net_params)
@@ -58,7 +52,7 @@ def main():
     optimizer = getattr(torch.optim, args.opt)(model.parameters(), **args.opt_params)
     criterion = getattr(criterions, args.criterion)
 
-    msg = ''
+    # msg = ''
     if args.resume:
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
@@ -89,9 +83,9 @@ def main():
         batch_size=args.batch_size,
         collate_fn=train_set.collate,
         sampler=train_sampler,
-        num_workers=args.workers,
-        pin_memory=True,
-        worker_init_fn=init_fn)
+        pin_memory=False,
+        num_workers=args.workers, worker_init_fn=seed_worker, generator=g
+    )
 
     start = time.time()
 
@@ -159,11 +153,6 @@ def main():
 
     msg = 'total time: {:.4f} minutes'.format((time.time() - start) / 60)
     logging.info(msg)
-
-
-def adjust_learning_rate(optimizer, epoch, MAX_EPOCHES, INIT_LR, power=0.9):
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = round(INIT_LR * np.power(1 - (epoch) / MAX_EPOCHES, power), 8)
 
 
 if __name__ == '__main__':
