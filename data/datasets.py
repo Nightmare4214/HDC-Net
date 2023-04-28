@@ -3,47 +3,50 @@ import torch
 from torch.utils.data import Dataset
 
 # noinspection PyUnresolvedReferences
-from .rand import Uniform
+from .transforms import StackImagesd, PercentileAndZScored
 # noinspection PyUnresolvedReferences
-from .transforms import Rot90, Flip, Identity, Compose, GaussianBlur, Noise, Normalize, RandSelect,RandCrop, CenterCrop, Pad, RandCrop3D, RandomRotion, RandomFlip, RandomIntensityChange, NumpyType
-from .data_utils import pkload
+from monai.transforms import MapTransform, Compose, LoadImaged, CastToTyped, EnsureChannelFirstd, RandSpatialCropd, \
+    RandRotated, RandScaleIntensityd, RandShiftIntensityd, RandFlipd, Pad, Padd
 
 import numpy as np
 
+modalities = ('flair', 't1ce', 't1', 't2')
+label = 'seg'
+
 
 class BraTSDataset(Dataset):
-    def __init__(self, list_file, root='', for_train=False, transforms=''):
-        paths, names = [], []
+    def __init__(self, list_file, root='', find_label=True, transforms=''):
+        paths = []
+        names = []
         with open(list_file) as f:
             for line in f:
                 line = line.strip()
+                if not line:
+                    continue
                 name = os.path.basename(line)
                 names.append(name)
-                path = os.path.join(root, line, name + '_')
-                paths.append(path)
+
+                temp = {}
+                for modality in modalities:
+                    temp[modality] = os.path.join(root, line, f'{name}_{modality}.nii.gz')
+                if find_label:
+                    temp['seg'] = os.path.join(root, line, f'{name}_seg.nii.gz')
+                paths.append(temp)
 
         self.names = names
         self.paths = paths
         self.transforms = eval(transforms or 'Identity()')
 
     def __getitem__(self, index):
-        path = self.paths[index]
-        x, y = pkload(path + 'data_f32.pkl')
-        # print(x.shape, y.shape)#(240, 240, 155, 4) (240, 240, 155)
-        # transforms work with nhwtc
-        x, y = x[None, ...], y[None, ...]
-        # print(x.shape, y.shape)#(1, 240, 240, 155, 4) (1, 240, 240, 155)
-        x, y = self.transforms([x, y])
+        temp = self.transforms(self.paths[index])
+        for k in modalities:
+            temp.pop(k)
 
-        x = np.ascontiguousarray(x.transpose(0, 4, 1, 2, 3))  # [Bsize,channels,Height,Width,Depth]
-        y = np.ascontiguousarray(y)
-
-        x, y = torch.from_numpy(x), torch.from_numpy(y)
-        # print(x.shape, y.shape)  # (240, 240, 155, 4) (240, 240, 155)
-        return x, y
+        if 'seg' in temp:
+            temp['seg'][temp['seg'] == 4] = 3
+        # {'image': (4, H, W, D),
+        #  'seg': (1, H, W, D)}
+        return temp
 
     def __len__(self):
         return len(self.names)
-
-    def collate(self, batch):
-        return [torch.cat(v) for v in zip(*batch)]

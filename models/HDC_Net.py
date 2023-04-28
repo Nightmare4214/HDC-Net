@@ -1,14 +1,12 @@
 import torch
 import torch.nn as nn
 
-from .sync_batchnorm import SynchronizedBatchNorm3d
-
 
 class Conv_1x1x1(nn.Module):
     def __init__(self, in_dim, out_dim, activation):
         super(Conv_1x1x1, self).__init__()
         self.conv1 = nn.Conv3d(in_dim, out_dim, kernel_size=1, stride=1, padding=0, bias=True)
-        self.norm = SynchronizedBatchNorm3d(out_dim)
+        self.norm = nn.BatchNorm3d(out_dim)
         self.act = activation
 
     def forward(self, x):
@@ -20,7 +18,7 @@ class Conv_3x3x1(nn.Module):
     def __init__(self, in_dim, out_dim, activation):
         super(Conv_3x3x1, self).__init__()
         self.conv1 = nn.Conv3d(in_dim, out_dim, kernel_size=(3, 3, 1), stride=1, padding=(1, 1, 0), bias=True)
-        self.norm = SynchronizedBatchNorm3d(out_dim)
+        self.norm = nn.BatchNorm3d(out_dim)
         self.act = activation
 
     def forward(self, x):
@@ -32,7 +30,7 @@ class Conv_1x3x3(nn.Module):
     def __init__(self, in_dim, out_dim, activation):
         super(Conv_1x3x3, self).__init__()
         self.conv1 = nn.Conv3d(in_dim, out_dim, kernel_size=(1, 3, 3), stride=1, padding=(0, 1, 1), bias=True)
-        self.norm = SynchronizedBatchNorm3d(out_dim)
+        self.norm = nn.BatchNorm3d(out_dim)
         self.act = activation
 
     def forward(self, x):
@@ -44,7 +42,7 @@ class Conv_3x3x3(nn.Module):
     def __init__(self, in_dim, out_dim, activation):
         super(Conv_3x3x3, self).__init__()
         self.conv1 = nn.Conv3d(in_dim, out_dim, kernel_size=(3, 3, 3), stride=1, padding=(1, 1, 1), bias=True)
-        self.norm = SynchronizedBatchNorm3d(out_dim)
+        self.norm = nn.BatchNorm3d(out_dim)
         self.act = activation
 
     def forward(self, x):
@@ -56,7 +54,7 @@ class Conv_down(nn.Module):
     def __init__(self, in_dim, out_dim, activation):
         super(Conv_down, self).__init__()
         self.conv1 = nn.Conv3d(in_dim, out_dim, kernel_size=(3, 3, 3), stride=2, padding=(1, 1, 1), bias=True)
-        self.norm = SynchronizedBatchNorm3d(out_dim)
+        self.norm = nn.BatchNorm3d(out_dim)
         self.act = activation
 
     def forward(self, x):
@@ -100,15 +98,18 @@ class HDC_module(nn.Module):
 def conv_trans_block_3d(in_dim, out_dim, activation):
     return nn.Sequential(
         nn.ConvTranspose3d(in_dim, out_dim, kernel_size=3, stride=2, padding=1, output_padding=1),
-        SynchronizedBatchNorm3d(out_dim),
+        nn.BatchNorm3d(out_dim),
         activation)
 
 
-device1 = torch.device("cuda")
-
-
 def hdc(image, num=2):
-    x1 = torch.Tensor([]).to(device1)
+    # periodic down-shuffling
+    x1 = torch.Tensor([]).to(image.device)
+    h, w, d = image.shape[2:]
+    assert 0 == h % num
+    assert 0 == w % num
+    assert 0 == d % num
+
     for i in range(num):
         for j in range(num):
             for k in range(num):
@@ -118,7 +119,7 @@ def hdc(image, num=2):
 
 
 class HDC_Net(nn.Module):
-    def __init__(self, in_dim, out_dim, num_filters=32):
+    def __init__(self, in_dim, out_dim, num_filters=32, **kwargs):
         super(HDC_Net, self).__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
@@ -147,42 +148,43 @@ class HDC_Net(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv3d):
                 torch.nn.init.torch.nn.init.kaiming_normal_(m.weight)  #
-            elif isinstance(m, nn.BatchNorm3d) or isinstance(m, nn.GroupNorm) or isinstance(m, SynchronizedBatchNorm3d):
+            elif isinstance(m, nn.BatchNorm3d) or isinstance(m, nn.GroupNorm) or isinstance(m, nn.BatchNorm3d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x):
-        x = hdc(x)
+    def forward(self, x):  # (B, C, H, W, D)
+        x = hdc(x)  # (B, 8C, H / 2, W / 2, D / 2)
         x = self.conv_3x3x3(x)
         x1 = self.conv_1(x)
-        x = self.down_1(x1)
+        x = self.down_1(x1)  # (B, 8C, H / 4, W / 4, D / 4)
         x2 = self.conv_2(x)
-        x = self.down_2(x2)
+        x = self.down_2(x2)  # (B, 8C, H / 8, W / 8, D / 8)
         x3 = self.conv_3(x)
-        x = self.down_3(x3)
-        x = self.bridge(x)
-        x = self.up_1(x)
-        x = torch.cat((x, x3), dim=1)
-        x = self.conv_4(x)
-        x = self.up_2(x)
-        x = torch.cat((x, x2), dim=1)
-        x = self.conv_5(x)
-        x = self.up_3(x)
-        x = torch.cat((x, x1), dim=1)
-        x = self.conv_6(x)
-        x = self.upsample(x)
-        x = self.out(x)
+        x = self.down_3(x3)  # (B, 8C, H / 16, W / 16, D / 16)
+        x = self.bridge(x)  # (B, 8C, H / 16, W / 16, D / 16)
+        x = self.up_1(x)  # (B, 8C, H / 8, W / 8, D / 8)
+        x = torch.cat((x, x3), dim=1)  # (B, 16C, H / 8, W / 8, D / 8)
+        x = self.conv_4(x)  # (B, 8C, H / 8, W / 8, D / 8)
+        x = self.up_2(x)  # (B, 8C, H / 4, W / 4, D / 4)
+        x = torch.cat((x, x2), dim=1)  # (B, 16C, H / 4, W / 4, D / 4)
+        x = self.conv_5(x)  # (B, 8C, H / 4, W / 4, D / 4)
+        x = self.up_3(x)  # (B, 8C, H / 2, W / 2, D / 2)
+        x = torch.cat((x, x1), dim=1)  # (B, 16C, H / 2, W / 2, D / 2)
+        x = self.conv_6(x)  # (B, 8C, H / 2, W / 2, D / 2)
+        x = self.upsample(x)  # (B, 8C, H, W, D)
+        x = self.out(x)  # (B, out_dim, H, W, D)
         x = self.softmax(x)
-        return x
+        return x  # (B, out_dim, H, W, D)
 
 
 if __name__ == "__main__":
     # from thop import profile
     device = torch.device('cuda')
     image_size = 128
-    x = torch.rand((1, 4, 128, 128, 128), device=device)
+    x = torch.rand((1, 1, 144, 144, 32), device=device)
     print("x size: {}".format(x.size()))
-    model = HDC_Net(in_dim=4, out_dim=4, num_filters=32).to(device)
+    model = HDC_Net(in_dim=1, out_dim=4, num_filters=8).to(device)
+    # torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     # flops, params = profile(model, inputs=(x,))
     # print("***********")
     # print(flops, params)

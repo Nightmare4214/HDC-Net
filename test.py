@@ -95,13 +95,13 @@ def main():
         raise ValueError
 
     Dataset = getattr(datasets, args.dataset)  #
-    valid_set = Dataset(valid_list, root=root_path, for_train=False, transforms=args.test_transforms)
+    valid_set = Dataset(valid_list, root=root_path, find_label=is_scoring, transforms=args.test_transforms)
 
     valid_loader = DataLoader(
         valid_set,
         batch_size=1,
         shuffle=False,
-        collate_fn=valid_set.collate,
+        # collate_fn=valid_set.collate,
         # num_workers=1,
         # pin_memory=False
     )
