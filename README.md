@@ -134,6 +134,13 @@ year={2020}}
 2. [BraTS2018-tumor-segmentation](https://github.com/ieee820/BraTS2018-tumor-segmentation)
 3. [Synchronized-BatchNorm-PyTorch](https://github.com/vacancy/Synchronized-BatchNorm-PyTorch)
 
+## result
+
+### model_last
+Dice_ET: 0.74589  
+Dice_WT: 0.87299  
+Dice_TC: 0.74824
+
 ## TODO
 
 - add DDP
